@@ -1,71 +1,91 @@
 # Banking BFF POC
 
-A small local proof of concept for two React clients, two .NET APIs, and one reusable .NET Backend-for-Frontend.
+A local proof of concept for two independent bank deployments using the same .NET BFF codebase. Bank A and Bank B each have a React frontend, a BFF instance, a downstream API, and a separate Keycloak realm. The BFF image is built from the same source for both banks; configuration and runtime state are isolated.
 
 ## Architecture
 
 ~~~mermaid
 flowchart LR
-  A["React Service A<br/>localhost:5173"] -->|"HttpOnly session cookie"| BFF["Shared .NET BFF<br/>localhost:5100"]
-  B["React Service B<br/>localhost:5174"] -->|"HttpOnly session cookie"| BFF
-  BFF <-->|"OIDC code + PKCE"| IDP["Keycloak<br/>keycloak.localhost:8080"]
-  BFF -->|"Bearer access token"| APIA["Service A .NET API"]
-  BFF -->|"Bearer access token"| APIB["Service B .NET API"]
+  subgraph A[Bank A boundary]
+    AWeb[React Bank A<br/>localhost:5173] -->|BankASession cookie| ABFF[Shared BFF code<br/>instance A: localhost:5101]
+    ABFF -->|Bank A access token| AAPI[Bank A API]
+    ABFF <-->|OIDC| AIdP[Keycloak realm bank-a]
+  end
+  subgraph B[Bank B boundary]
+    BWeb[React Bank B<br/>localhost:5174] -->|BankBSession cookie| BBFF[Shared BFF code<br/>instance B: localhost:5102]
+    BBFF -->|Bank B access token| BAPI[Bank B API]
+    BBFF <-->|OIDC| BIdP[Keycloak realm bank-b]
+  end
+  Keycloak[Keycloak process]
+  Keycloak --- AIdP
+  Keycloak --- BIdP
 ~~~
 
-The React apps call the same BFF origin. The URL route key selects the downstream service: /api/service-a/... or /api/service-b/.... The BFF maps that key to a configured backend URL; the browser cannot choose the URL or override it with a header. This route key identifies the requested backend, not the UI that originated the request; browser-supplied origin or source headers are not authentication. The APIs independently validate the token's issuer, audience, and service-specific role.
+The local demo models separate bank deployments: both BFF containers run the same `billpay-bff-poc:local` image, while each has its own session cookie name, OIDC client, issuer/realm, user, service scope, and configured API destination. The Compose network also places each BFF only on the network for its own API and Keycloak. The same BFF code can therefore be deployed with different bank-specific configuration without adding bank-specific routing logic to the BFF implementation.
 
-The browser receives an opaque, HttpOnly session cookie. ASP.NET Core's cookie ITicketStore stores the authentication ticket, including OAuth tokens, in the BFF process. The access token is attached to the server-to-server API request and is never returned to React. Both frontends share the same BFF session on localhost.
+The browser holds an opaque HttpOnly session cookie. OAuth tokens remain in that bank's BFF process and are attached only to its downstream API request. Each API independently validates the expected issuer, audience, and bank-specific role.
 
 ## Run locally
 
-Requirements: Docker Compose and a browser. The container builds use .NET 10 and Node 22.
+Requirements: Docker Compose, Python 3, and a browser. The container builds use .NET 10 and Node 22.
 
-1. Generate private local credentials and the Keycloak realm import:
+1. Generate private credentials and realm imports:
 
    ~~~sh
    python3 scripts/prepare-local-config.py
    ~~~
 
-   This writes a private `.env` and a generated realm file under an ignored directory. The script creates random Keycloak admin, BFF client, and demo user passwords; they are not stored in Git.
-2. Start the sample:
+   This creates a private `.env` plus ignored Keycloak import files for both realms. Bank A and Bank B have different BFF client secrets and user passwords. The demo usernames are `bank-a-user` and `bank-b-user`; their generated passwords are in `.env` as `BANK_A_USER_PASSWORD` and `BANK_B_USER_PASSWORD`.
+
+2. If an older version of this demo is running, remove its containers first so Keycloak imports the two new realms:
+
+   ~~~sh
+   docker compose down --remove-orphans
+   ~~~
+
+3. Build and start the demo:
 
    ~~~sh
    docker compose up --build
    ~~~
 
-3. Wait until the [Keycloak realm discovery document](http://keycloak.localhost:8080/realms/bank-demo/.well-known/openid-configuration) returns JSON, then open [Service A](http://localhost:5173) or [Service B](http://localhost:5174).
-4. Choose **Continue to secure sign in**. The local demo account is `demo`; its generated password is in the private `.env` file as `DEMO_USER_PASSWORD`.
-5. Service A shows static example accounts. Service B shows static transactions and a CSRF-protected transfer preview. The preview never moves money.
+4. Wait until both realm discovery documents return JSON:
 
-Local endpoints:
+   - [Bank A OIDC discovery](http://keycloak.localhost:8080/realms/bank-a/.well-known/openid-configuration)
+   - [Bank B OIDC discovery](http://keycloak.localhost:8080/realms/bank-b/.well-known/openid-configuration)
+
+5. Open either bank app and sign in with that bank's demo user:
+
+   - [Bank A](http://localhost:5173) — `bank-a-user`
+   - [Bank B](http://localhost:5174) — `bank-b-user`
+
+## Verify the isolation
+
+1. Sign in to Bank A. In browser developer tools, confirm the browser uses the `BankASession` cookie for BFF A (`localhost:5101`).
+2. Open Bank B in the same browser. It should show the signed-out view; its `/auth/me` call to BFF B (`localhost:5102`) should return `401` until Bank B is signed into separately.
+3. Sign into Bank B using `bank-b-user`. Bank B then uses `BankBSession`; Bank A remains signed in with its own session.
+4. Try Bank A credentials on Bank B's Keycloak login page, and vice versa. The separate realms should reject the other bank's account.
+5. Inspect network requests: Bank A calls `localhost:5101`, Bank B calls `localhost:5102`; neither frontend sends an `Authorization: Bearer` header. Each BFF is configured with only its own service key and API URL.
+6. While signed into Bank A, a request to `/api/service-b/transactions` on BFF A (or, while signed into Bank B, `/api/service-a/accounts` on BFF B) should return `404` because that service is not configured in that BFF deployment. Each API also rejects tokens issued by the other realm because its issuer and audience do not match.
+
+Note: browsers scope cookies to a host, not a port. Both local BFFs use `localhost`, so the browser may send both named cookies to either port. Each BFF reads only its own cookie name. In a real deployment, each bank should use its own hostname and deployment boundary as well as independent session storage, OIDC configuration, keys, and downstream network access.
+
+## Local endpoints
 
 | Component | URL |
 | --- | --- |
-| React Service A | http://localhost:5173 |
-| React Service B | http://localhost:5174 |
-| Shared BFF | http://localhost:5100 |
+| React Bank A | http://localhost:5173 |
+| Bank A BFF | http://localhost:5101 |
+| Bank A API | Internal to the Bank A Compose network |
+| React Bank B | http://localhost:5174 |
+| Bank B BFF | http://localhost:5102 |
+| Bank B API | Internal to the Bank B Compose network |
 | Keycloak | http://keycloak.localhost:8080 |
+| Bank A realm | http://keycloak.localhost:8080/realms/bank-a |
+| Bank B realm | http://keycloak.localhost:8080/realms/bank-b |
 
-Stop the containers with docker compose down. Realm data is generated from `infrastructure/keycloak/bank-demo-realm.json` when you run the local setup script. Browser-facing ports are bound to loopback, and the APIs are only on the internal Compose network.
+## POC limitations
 
-## Useful request paths
+The local demo intentionally uses HTTP, development credentials, fake banking data, one Keycloak process hosting two separate realms, one BFF process per bank, in-memory BFF ticket stores, and one-hour access tokens without refresh. It demonstrates tenant/session isolation and the BFF request flow; it is not a production banking security baseline.
 
-- GET /auth/me — current BFF session, or 401.
-- GET /auth/csrf — issues the antiforgery cookie and returns the request token used in X-CSRF-TOKEN.
-- POST /auth/logout — clears the BFF session; requires the CSRF token.
-- GET /api/service-a/accounts — proxied to Service A with a server-side bearer token.
-- GET /api/service-b/transactions — proxied to Service B with a server-side bearer token.
-- POST /api/service-b/transfer-preview — same proxy path and CSRF validation; returns a preview only.
-
-The BFF's allow-listed service keys, destination URLs, and OAuth scopes are configured under Bff:Services in services/bff/appsettings.json (or environment variables in Compose). The BFF reads scopes and destinations from that section, so adding a downstream service does not require changing the proxy code. Add its identity-provider scope/audience and API-side authorization configuration as well.
-
-## What to inspect in the browser
-
-Open the browser's Application/Storage panel. BffSession is marked HttpOnly; JavaScript cannot read it. The browser's calls go to the BFF and contain a cookie, not an Authorization: Bearer header. The BFF's ticket store contains the OIDC access and refresh tokens in server memory, and the BFF adds the access token only on its call to a downstream API.
-
-The local demo intentionally uses HTTP and development credentials, static fake banking data, an in-memory session store, and one BFF instance. It demonstrates the flow, not a production banking security baseline. The local access token is configured for one hour and this POC does not refresh it. The logout endpoint clears the BFF session but does not end the identity provider's SSO session. Before adapting it for a bank, integrate the bank's identity provider and policies; require HTTPS; use a shared, encrypted, expiry-aware ticket store and shared ASP.NET Data Protection keys; implement token refresh/revocation and identity-provider logout; add audit logging, rate limits, request-size limits, and operational monitoring; define user-, account-, and action-level authorization in the APIs; and configure deployment-specific trusted proxy IPs under ForwardedHeaders:KnownProxies, cookie, CORS, secrets, and network rules. The APIs must remain independently authorized even when all requests currently arrive through the BFF.
-
-The BFF keeps OAuth tokens out of JavaScript, but it does not stop malicious JavaScript from making authenticated requests through a user's active session. Protect the frontends against XSS and compromised dependencies, and keep authorization and transaction controls in the APIs.
-
-This sample does not implement transfer execution, transaction signing, consent, step-up authentication, fraud checks, idempotency, or any real account data.
+Before a bank deployment, use HTTPS, bank-managed identity configuration and secrets, separate deployment/network boundaries, an encrypted shared ticket store and shared ASP.NET Data Protection keys for each bank's BFF replicas, token refresh/revocation and identity-provider logout, audit logging, rate and request-size limits, and operational monitoring. Keep user-, account-, and action-level authorization in each API even though requests arrive through a BFF. Protect the frontend against XSS and compromised dependencies: a BFF keeps access tokens out of JavaScript but cannot stop malicious JavaScript from using the active browser session to send requests.

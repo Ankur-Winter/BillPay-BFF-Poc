@@ -10,9 +10,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / ".env"
-REALM_TEMPLATE = ROOT / "infrastructure" / "keycloak" / "bank-demo-realm.json"
+REALMS = {
+    "bank-a": {
+        "template": ROOT / "infrastructure" / "keycloak" / "bank-a-realm.json",
+        "client_id": "bank-a-bff",
+        "client_secret_key": "BANK_A_BFF_CLIENT_SECRET",
+        "username": "bank-a-user",
+        "password_key": "BANK_A_USER_PASSWORD",
+    },
+    "bank-b": {
+        "template": ROOT / "infrastructure" / "keycloak" / "bank-b-realm.json",
+        "client_id": "bank-b-bff",
+        "client_secret_key": "BANK_B_BFF_CLIENT_SECRET",
+        "username": "bank-b-user",
+        "password_key": "BANK_B_USER_PASSWORD",
+    },
+}
 GENERATED_DIR = ROOT / "infrastructure" / "keycloak" / "generated"
-GENERATED_REALM = GENERATED_DIR / "bank-demo-realm.json"
 
 
 def read_env(path: Path) -> dict[str, str]:
@@ -37,7 +51,13 @@ def ensure_random(values: dict[str, str], key: str) -> None:
 def main() -> None:
     values = read_env(ENV_FILE)
     values.setdefault("KEYCLOAK_ADMIN", "admin")
-    for key in ("KEYCLOAK_ADMIN_PASSWORD", "BFF_CLIENT_SECRET", "DEMO_USER_PASSWORD"):
+    for key in (
+        "KEYCLOAK_ADMIN_PASSWORD",
+        "BANK_A_BFF_CLIENT_SECRET",
+        "BANK_B_BFF_CLIENT_SECRET",
+        "BANK_A_USER_PASSWORD",
+        "BANK_B_USER_PASSWORD",
+    ):
         ensure_random(values, key)
 
     env_content = "".join(f"{key}={value}\n" for key, value in values.items())
@@ -47,19 +67,31 @@ def main() -> None:
     except OSError:
         pass
 
-    realm = json.loads(REALM_TEMPLATE.read_text(encoding="utf-8"))
-    for client in realm.get("clients", []):
-        if client.get("clientId") == "bank-bff":
-            client["secret"] = values["BFF_CLIENT_SECRET"]
-    for user in realm.get("users", []):
-        if user.get("username") == "demo":
-            for credential in user.get("credentials", []):
-                if credential.get("type") == "password":
-                    credential["value"] = values["DEMO_USER_PASSWORD"]
-
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
-    GENERATED_REALM.write_text(json.dumps(realm, indent=2) + "\n", encoding="utf-8")
-    print("Generated local credentials in .env and the ignored Keycloak import file.")
+    try:
+        GENERATED_DIR.chmod(0o700)
+    except OSError:
+        pass
+
+    for realm_name, config in REALMS.items():
+        realm = json.loads(config["template"].read_text(encoding="utf-8"))
+        for client in realm.get("clients", []):
+            if client.get("clientId") == config["client_id"]:
+                client["secret"] = values[config["client_secret_key"]]
+        for user in realm.get("users", []):
+            if user.get("username") == config["username"]:
+                for credential in user.get("credentials", []):
+                    if credential.get("type") == "password":
+                        credential["value"] = values[config["password_key"]]
+
+        generated_realm = GENERATED_DIR / f"{realm_name}-realm.json"
+        generated_realm.write_text(json.dumps(realm, indent=2) + "\n", encoding="utf-8")
+        try:
+            generated_realm.chmod(0o600)
+        except OSError:
+            pass
+
+    print("Generated independent Bank A and Bank B local credentials and Keycloak realms.")
     print("Keep both files private; they are excluded from Git.")
 
 

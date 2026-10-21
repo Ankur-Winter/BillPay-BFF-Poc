@@ -39,13 +39,13 @@ app.MapGet("/api/accounts", (HttpContext context) =>
         new { accountId = "A-1001", owner = customer, accountType = "Everyday", currency = "USD", availableBalance = 1842.61m },
         new { accountId = "A-1002", owner = customer, accountType = "Savings", currency = "USD", availableBalance = 9250.00m }
     });
-}).RequireAuthorization(policy => policy.RequireRole("service-a-user"));
+}).RequireAuthorization(policy => policy.RequireRole("bank-a-user"));
 
 app.MapGet("/api/profile", (HttpContext context) => Results.Ok(new
 {
     user = context.User.FindFirst("preferred_username")?.Value ?? "demo",
     service = "service-a",
     note = "Sample profile response from Service A."
-})).RequireAuthorization(policy => policy.RequireRole("service-a-user"));
+})).RequireAuthorization(policy => policy.RequireRole("bank-a-user"));
 
 app.Run();

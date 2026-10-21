@@ -1,0 +1,129 @@
+{
+  "realm": "bank-b",
+  "enabled": true,
+  "displayName": "Bank B Demo",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "accessTokenLifespan": 3600,
+  "roles": {
+    "realm": [
+      { "name": "bank-b-user" }
+    ]
+  },
+  "clientScopes": [
+    {
+      "name": "bank-b-user-profile",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "preferred-username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "service-b-api",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "service-b-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "service-b-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "bank-b-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "service-b-api",
+      "name": "Bank B Service API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "bearerOnly": true
+    },
+    {
+      "clientId": "bank-b-bff",
+      "name": "Bank B BFF",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "clientAuthenticatorType": "client-secret",
+      "secret": "__BANK_B_BFF_CLIENT_SECRET__",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5102/signin-oidc"
+      ],
+      "webOrigins": [
+        "http://localhost:5174"
+      ],
+      "defaultClientScopes": [
+        "bank-b-user-profile"
+      ],
+      "optionalClientScopes": [
+        "service-b-api"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "bank-b-user",
+      "enabled": true,
+      "email": "bank-b-user@example.test",
+      "emailVerified": true,
+      "firstName": "Bank B",
+      "lastName": "Demo User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "__BANK_B_USER_PASSWORD__",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "bank-b-user"
+      ]
+    }
+  ]
+}

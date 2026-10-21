@@ -12,6 +12,13 @@ var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get
 var frontendOrigins = builder.Configuration.GetSection("Bff:FrontendOrigins").Get<Dictionary<string, string>>() ?? [];
 var downstreamServices = builder.Configuration.GetSection("Bff:Services").GetChildren().ToArray();
 var production = !builder.Environment.IsDevelopment();
+var sessionCookieName = builder.Configuration["Bff:SessionCookieName"] ?? (production ? "__Host-BffSession" : "BffSession");
+var antiforgeryCookieName = builder.Configuration["Bff:AntiforgeryCookieName"] ?? (production ? "__Host-BffCsrf" : "BffCsrf");
+
+if (downstreamServices.Length == 0)
+{
+    throw new InvalidOperationException("Configure at least one Bff:Services destination for this BFF deployment.");
+}
 
 builder.Services.AddSingleton<ITicketStore, InMemoryTicketStore>();
 builder.Services.AddSingleton<DownstreamProxy>();
@@ -29,7 +36,7 @@ builder.Services.AddCors(options => options.AddPolicy("frontends", policy =>
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-CSRF-TOKEN";
-    options.Cookie.Name = production ? "__Host-BffCsrf" : "BffCsrf";
+    options.Cookie.Name = antiforgeryCookieName;
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.SecurePolicy = production ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
@@ -42,7 +49,7 @@ builder.Services.AddAuthentication(options =>
 })
 .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
 {
-    options.Cookie.Name = production ? "__Host-BffSession" : "BffSession";
+    options.Cookie.Name = sessionCookieName;
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Lax;
     options.Cookie.SecurePolicy = production ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;

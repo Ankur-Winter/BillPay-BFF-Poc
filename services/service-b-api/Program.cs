@@ -39,7 +39,7 @@ app.MapGet("/api/transactions", (HttpContext context) =>
         new { transactionId = "T-8001", owner = customer, description = "Coffee shop", amount = -6.45m, currency = "USD", date = "2026-10-19" },
         new { transactionId = "T-8002", owner = customer, description = "Salary sample", amount = 2400.00m, currency = "USD", date = "2026-10-15" }
     });
-}).RequireAuthorization(policy => policy.RequireRole("service-b-user"));
+}).RequireAuthorization(policy => policy.RequireRole("bank-b-user"));
 
 IResult CreateTransferPreview(TransferRequest request)
 {
@@ -67,7 +67,7 @@ IResult CreateTransferPreview(TransferRequest request)
 }
 
 app.MapPost("/api/transfer-preview", CreateTransferPreview)
-    .RequireAuthorization(policy => policy.RequireRole("service-b-user"));
+    .RequireAuthorization(policy => policy.RequireRole("bank-b-user"));
 
 app.Run();
 

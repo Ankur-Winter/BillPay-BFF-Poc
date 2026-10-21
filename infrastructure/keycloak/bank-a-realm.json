@@ -1,7 +1,7 @@
 {
-  "realm": "bank-demo",
+  "realm": "bank-a",
   "enabled": true,
-  "displayName": "Banking BFF POC",
+  "displayName": "Bank A Demo",
   "sslRequired": "none",
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
@@ -9,18 +9,12 @@
   "accessTokenLifespan": 3600,
   "roles": {
     "realm": [
-      {
-        "name": "service-a-user"
-      },
-      {
-        "name": "service-b-user"
-      }
+      { "name": "bank-a-user" }
     ]
   },
   "clientScopes": [
     {
-      "name": "bank-user-profile",
-      "description": "Username claims for the BFF and sample APIs",
+      "name": "bank-a-user-profile",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
@@ -45,7 +39,6 @@
     },
     {
       "name": "service-a-api",
-      "description": "Audience and role claims for Service A",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
@@ -64,43 +57,7 @@
           }
         },
         {
-          "name": "realm-roles",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-usermodel-realm-role-mapper",
-          "consentRequired": false,
-          "config": {
-            "claim.name": "roles",
-            "jsonType.label": "String",
-            "multivalued": "true",
-            "id.token.claim": "false",
-            "access.token.claim": "true",
-            "userinfo.token.claim": "false"
-          }
-        }
-      ]
-    },
-    {
-      "name": "service-b-api",
-      "description": "Audience and role claims for Service B",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
-      },
-      "protocolMappers": [
-        {
-          "name": "service-b-api-audience",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.client.audience": "service-b-api",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        },
-        {
-          "name": "realm-roles",
+          "name": "bank-a-roles",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-usermodel-realm-role-mapper",
           "consentRequired": false,
@@ -119,63 +76,53 @@
   "clients": [
     {
       "clientId": "service-a-api",
-      "name": "Service A API",
+      "name": "Bank A Service API",
       "enabled": true,
       "protocol": "openid-connect",
       "bearerOnly": true
     },
     {
-      "clientId": "service-b-api",
-      "name": "Service B API",
-      "enabled": true,
-      "protocol": "openid-connect",
-      "bearerOnly": true
-    },
-    {
-      "clientId": "bank-bff",
-      "name": "Shared Banking BFF",
+      "clientId": "bank-a-bff",
+      "name": "Bank A BFF",
       "enabled": true,
       "protocol": "openid-connect",
       "clientAuthenticatorType": "client-secret",
-      "secret": "__BFF_CLIENT_SECRET__",
+      "secret": "__BANK_A_BFF_CLIENT_SECRET__",
       "publicClient": false,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "redirectUris": [
-        "http://localhost:5100/signin-oidc"
+        "http://localhost:5101/signin-oidc"
       ],
       "webOrigins": [
-        "http://localhost:5173",
-        "http://localhost:5174"
+        "http://localhost:5173"
       ],
       "defaultClientScopes": [
-        "bank-user-profile"
+        "bank-a-user-profile"
       ],
       "optionalClientScopes": [
-        "service-a-api",
-        "service-b-api"
+        "service-a-api"
       ]
     }
   ],
   "users": [
     {
-      "username": "demo",
+      "username": "bank-a-user",
       "enabled": true,
-      "email": "demo@example.test",
+      "email": "bank-a-user@example.test",
       "emailVerified": true,
-      "firstName": "Demo",
-      "lastName": "Bank User",
+      "firstName": "Bank A",
+      "lastName": "Demo User",
       "credentials": [
         {
           "type": "password",
-          "value": "__DEMO_USER_PASSWORD__",
+          "value": "__BANK_A_USER_PASSWORD__",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "service-a-user",
-        "service-b-user"
+        "bank-a-user"
       ]
     }
   ]

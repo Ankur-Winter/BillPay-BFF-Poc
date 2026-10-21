@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const bff = import.meta.env.VITE_BFF_ORIGIN || "http://localhost:5100";
+const bff = import.meta.env.VITE_BFF_ORIGIN || "http://localhost:5102";
 const appId = import.meta.env.VITE_APP_ID || "service-b";
 const api = bff + "/api/" + appId;
 
@@ -69,13 +69,13 @@ export default function App() {
     <main className="shell">
       <header className="topbar">
         <a className="brand" href="/">NORTHSTAR <span>Bank</span></a>
-        <span className="service-pill">SERVICE B</span>
+        <span className="service-pill">BANK B</span>
         {user && <button className="quiet-button" onClick={logout}>Sign out</button>}
       </header>
       <section className="hero">
         <p className="eyebrow">BACKEND FOR FRONTEND DEMO</p>
-        <h1>Activity with<br /><em>a server-side session.</em></h1>
-        <p className="lede">This second React app shares the same BFF. A route key selects Service B, while the BFF adds the user's access token on the server-to-server call.</p>
+        <h1>Activity with<br /><em>Bank B's own session.</em></h1>
+        <p className="lede">This React app calls Bank B's deployment of the shared .NET BFF codebase. Bank B has its own identity realm, session cookie, and API route.</p>
       </section>
       <section className="panel">
         <div className="panel-heading">
@@ -84,7 +84,7 @@ export default function App() {
         </div>
         {loading ? <p className="muted">Checking your BFF session…</p> : !user ? (
           <div className="empty-state">
-            <p>Sign in through the shared BFF to view the sample activity.</p>
+            <p>Sign in to Bank B to view the sample activity.</p>
             <a className="primary-button" href={bff + "/auth/login?app=" + encodeURIComponent(appId)}>Continue to secure sign in</a>
           </div>
         ) : (

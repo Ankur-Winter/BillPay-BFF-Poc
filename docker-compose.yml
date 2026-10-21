@@ -12,72 +12,111 @@ services:
       KC_HEALTH_ENABLED: "true"
     ports:
       - "127.0.0.1:8080:8080"
+    volumes:
+      - ./infrastructure/keycloak/generated/bank-a-realm.json:/opt/keycloak/data/import/bank-a-realm.json:ro
+      - ./infrastructure/keycloak/generated/bank-b-realm.json:/opt/keycloak/data/import/bank-b-realm.json:ro
     networks:
-      default:
+      bank-a:
         aliases:
           - keycloak.localhost
-    volumes:
-      - ./infrastructure/keycloak/generated/bank-demo-realm.json:/opt/keycloak/data/import/bank-demo-realm.json:ro
+      bank-b:
+        aliases:
+          - keycloak.localhost
 
   service-a-api:
     build:
       context: ./services/service-a-api
     environment:
       ASPNETCORE_URLS: http://+:8080
-      Authentication__Authority: ${OIDC_AUTHORITY:-http://keycloak.localhost:8080/realms/bank-demo}
-      Authentication__Issuer: ${OIDC_ISSUER:-http://keycloak.localhost:8080/realms/bank-demo}
+      Authentication__Authority: ${BANK_A_OIDC_AUTHORITY:-http://keycloak.localhost:8080/realms/bank-a}
+      Authentication__Issuer: ${BANK_A_OIDC_ISSUER:-http://keycloak.localhost:8080/realms/bank-a}
       Authentication__Audience: service-a-api
+    networks:
+      - bank-a
 
   service-b-api:
     build:
       context: ./services/service-b-api
     environment:
       ASPNETCORE_URLS: http://+:8080
-      Authentication__Authority: ${OIDC_AUTHORITY:-http://keycloak.localhost:8080/realms/bank-demo}
-      Authentication__Issuer: ${OIDC_ISSUER:-http://keycloak.localhost:8080/realms/bank-demo}
+      Authentication__Authority: ${BANK_B_OIDC_AUTHORITY:-http://keycloak.localhost:8080/realms/bank-b}
+      Authentication__Issuer: ${BANK_B_OIDC_ISSUER:-http://keycloak.localhost:8080/realms/bank-b}
       Authentication__Audience: service-b-api
+    networks:
+      - bank-b
 
-  bff:
+  bff-bank-a:
+    image: billpay-bff-poc:local
     build:
       context: ./services/bff
     environment:
       ASPNETCORE_URLS: http://+:8080
       ASPNETCORE_ENVIRONMENT: Development
-      Authentication__Authority: ${OIDC_AUTHORITY:-http://keycloak.localhost:8080/realms/bank-demo}
-      Authentication__ClientId: bank-bff
-      Authentication__ClientSecret: "${BFF_CLIENT_SECRET:?Run python3 scripts/prepare-local-config.py first}"
+      Authentication__Authority: ${BANK_A_OIDC_AUTHORITY:-http://keycloak.localhost:8080/realms/bank-a}
+      Authentication__ClientId: bank-a-bff
+      Authentication__ClientSecret: "${BANK_A_BFF_CLIENT_SECRET:?Run python3 scripts/prepare-local-config.py first}"
       Authentication__CallbackPath: /signin-oidc
       Authentication__RequireHttpsMetadata: "false"
+      Bff__SessionCookieName: BankASession
+      Bff__AntiforgeryCookieName: BankACsrf
       Bff__Services__service-a__BaseUrl: http://service-a-api:8080/api/
       Bff__Services__service-a__Scope: service-a-api
+      Bff__FrontendOrigins__service-a: ${SERVICE_A_ORIGIN:-http://localhost:5173}
+      Cors__AllowedOrigins__0: ${SERVICE_A_ORIGIN:-http://localhost:5173}
+    ports:
+      - "127.0.0.1:5101:8080"
+    depends_on:
+      - keycloak
+      - service-a-api
+    networks:
+      - bank-a
+
+  bff-bank-b:
+    image: billpay-bff-poc:local
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Development
+      Authentication__Authority: ${BANK_B_OIDC_AUTHORITY:-http://keycloak.localhost:8080/realms/bank-b}
+      Authentication__ClientId: bank-b-bff
+      Authentication__ClientSecret: "${BANK_B_BFF_CLIENT_SECRET:?Run python3 scripts/prepare-local-config.py first}"
+      Authentication__CallbackPath: /signin-oidc
+      Authentication__RequireHttpsMetadata: "false"
+      Bff__SessionCookieName: BankBSession
+      Bff__AntiforgeryCookieName: BankBCsrf
       Bff__Services__service-b__BaseUrl: http://service-b-api:8080/api/
       Bff__Services__service-b__Scope: service-b-api
-      Cors__AllowedOrigins__0: ${SERVICE_A_ORIGIN:-http://localhost:5173}
-      Cors__AllowedOrigins__1: ${SERVICE_B_ORIGIN:-http://localhost:5174}
+      Bff__FrontendOrigins__service-b: ${SERVICE_B_ORIGIN:-http://localhost:5174}
+      Cors__AllowedOrigins__0: ${SERVICE_B_ORIGIN:-http://localhost:5174}
     ports:
-      - "127.0.0.1:5100:8080"
+      - "127.0.0.1:5102:8080"
     depends_on:
-      - service-a-api
+      - keycloak
       - service-b-api
+    networks:
+      - bank-b
 
   service-a-web:
     build:
       context: ./apps/service-a-web
     environment:
-      VITE_BFF_ORIGIN: ${BFF_ORIGIN:-http://localhost:5100}
+      VITE_BFF_ORIGIN: ${BANK_A_BFF_ORIGIN:-http://localhost:5101}
       VITE_APP_ID: service-a
     ports:
       - "127.0.0.1:5173:5173"
     depends_on:
-      - bff
+      - bff-bank-a
 
   service-b-web:
     build:
       context: ./apps/service-b-web
     environment:
-      VITE_BFF_ORIGIN: ${BFF_ORIGIN:-http://localhost:5100}
+      VITE_BFF_ORIGIN: ${BANK_B_BFF_ORIGIN:-http://localhost:5102}
       VITE_APP_ID: service-b
     ports:
       - "127.0.0.1:5174:5173"
     depends_on:
-      - bff
+      - bff-bank-b
+
+networks:
+  bank-a:
+  bank-b:
