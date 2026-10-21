@@ -19,6 +19,31 @@
   },
   "clientScopes": [
     {
+      "name": "bank-user-profile",
+      "description": "Username claims for the BFF and sample APIs",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "preferred-username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
       "name": "service-a-api",
       "description": "Audience and role claims for Service A",
       "protocol": "openid-connect",
@@ -125,11 +150,9 @@
         "http://localhost:5174"
       ],
       "defaultClientScopes": [
-        "web-origins",
-        "acr",
-        "profile",
-        "roles",
-        "email",
+        "bank-user-profile"
+      ],
+      "optionalClientScopes": [
         "service-a-api",
         "service-b-api"
       ]

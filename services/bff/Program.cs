@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using System.Net;
 
@@ -37,7 +38,7 @@ builder.Services.AddAntiforgery(options =>
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
 })
 .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
 {
@@ -70,14 +71,13 @@ builder.Services.AddAuthentication(options =>
     options.NonceCookie.SecurePolicy = production ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
     options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
     options.ResponseType = OpenIdConnectResponseType.Code;
+    options.ResponseMode = OpenIdConnectResponseMode.Query;
     options.UsePkce = true;
     options.SaveTokens = true;
-    options.GetClaimsFromUserInfoEndpoint = true;
+    options.GetClaimsFromUserInfoEndpoint = false;
     options.MapInboundClaims = false;
     options.Scope.Clear();
     options.Scope.Add("openid");
-    options.Scope.Add("profile");
-    options.Scope.Add("email");
     foreach (var service in downstreamServices)
     {
         var scope = service["Scope"];
@@ -86,7 +86,9 @@ builder.Services.AddAuthentication(options =>
             options.Scope.Add(scope);
         }
     }
-    options.TokenValidationParameters.NameClaimType = "name";
+    options.CorrelationCookie.SameSite = SameSiteMode.Lax;
+    options.NonceCookie.SameSite = SameSiteMode.Lax;
+    options.TokenValidationParameters.NameClaimType = "preferred_username";
     options.TokenValidationParameters.RoleClaimType = "roles";
 });
 builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -103,7 +105,7 @@ if (!app.Environment.IsDevelopment())
         ForwardLimit = 1
     };
     forwardedOptions.KnownProxies.Clear();
-    forwardedOptions.KnownNetworks.Clear();
+    forwardedOptions.KnownIPNetworks.Clear();
     foreach (var proxy in builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
     {
         if (IPAddress.TryParse(proxy, out var address))
@@ -121,7 +123,7 @@ app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "bff" }));
 
-IResult StartLogin(string? appId)
+IResult StartLogin([Microsoft.AspNetCore.Mvc.FromQuery(Name = "app")] string? appId)
 {
     if (appId is null || !frontendOrigins.TryGetValue(appId, out var destination))
     {
@@ -141,7 +143,7 @@ app.MapGet("/auth/me", (HttpContext context) =>
     {
         authenticated = true,
         subject = user.FindFirst("sub")?.Value,
-        name = user.FindFirst("name")?.Value ?? user.Identity?.Name,
+        name = user.FindFirst("preferred_username")?.Value ?? user.FindFirst("name")?.Value ?? user.Identity?.Name,
         roles = user.FindAll("roles").Select(c => c.Value).ToArray()
     });
 }).RequireAuthorization();

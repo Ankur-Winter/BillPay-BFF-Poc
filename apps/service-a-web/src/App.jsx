@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
 const bff = import.meta.env.VITE_BFF_ORIGIN || "http://localhost:5100";
-const api = bff + "/api/service-a";
+const appId = import.meta.env.VITE_APP_ID || "service-a";
+const api = bff + "/api/" + appId;
 
 async function getJson(url, init = {}) {
   const response = await fetch(url, { credentials: "include", ...init });
@@ -65,7 +66,7 @@ export default function App() {
         {loading ? <p className="muted">Checking your BFF session…</p> : !user ? (
           <div className="empty-state">
             <p>Sign in through the BFF to view the sample account data.</p>
-            <a className="primary-button" href={bff + "/auth/login?app=service-a"}>Continue to secure sign in</a>
+            <a className="primary-button" href={bff + "/auth/login?app=" + encodeURIComponent(appId)}>Continue to secure sign in</a>
           </div>
         ) : (
           <div className="account-list">
