@@ -1,0 +1,83 @@
+name: banking-bff-poc
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: "${KEYCLOAK_ADMIN:?Run python3 scripts/prepare-local-config.py first}"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD:?Run python3 scripts/prepare-local-config.py first}"
+      KC_HOSTNAME: http://keycloak.localhost:8080
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      default:
+        aliases:
+          - keycloak.localhost
+    volumes:
+      - ./infrastructure/keycloak/generated/bank-demo-realm.json:/opt/keycloak/data/import/bank-demo-realm.json:ro
+
+  service-a-api:
+    build:
+      context: ./services/service-a-api
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      Authentication__Authority: ${OIDC_AUTHORITY:-http://keycloak.localhost:8080/realms/bank-demo}
+      Authentication__Issuer: ${OIDC_ISSUER:-http://keycloak.localhost:8080/realms/bank-demo}
+      Authentication__Audience: service-a-api
+
+  service-b-api:
+    build:
+      context: ./services/service-b-api
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      Authentication__Authority: ${OIDC_AUTHORITY:-http://keycloak.localhost:8080/realms/bank-demo}
+      Authentication__Issuer: ${OIDC_ISSUER:-http://keycloak.localhost:8080/realms/bank-demo}
+      Authentication__Audience: service-b-api
+
+  bff:
+    build:
+      context: ./services/bff
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Development
+      Authentication__Authority: ${OIDC_AUTHORITY:-http://keycloak.localhost:8080/realms/bank-demo}
+      Authentication__ClientId: bank-bff
+      Authentication__ClientSecret: "${BFF_CLIENT_SECRET:?Run python3 scripts/prepare-local-config.py first}"
+      Authentication__CallbackPath: /signin-oidc
+      Authentication__RequireHttpsMetadata: "false"
+      Bff__Services__service-a__BaseUrl: http://service-a-api:8080/api/
+      Bff__Services__service-a__Scope: service-a-api
+      Bff__Services__service-b__BaseUrl: http://service-b-api:8080/api/
+      Bff__Services__service-b__Scope: service-b-api
+      Cors__AllowedOrigins__0: ${SERVICE_A_ORIGIN:-http://localhost:5173}
+      Cors__AllowedOrigins__1: ${SERVICE_B_ORIGIN:-http://localhost:5174}
+    ports:
+      - "127.0.0.1:5100:8080"
+    depends_on:
+      - service-a-api
+      - service-b-api
+
+  service-a-web:
+    build:
+      context: ./apps/service-a-web
+    environment:
+      VITE_BFF_ORIGIN: ${BFF_ORIGIN:-http://localhost:5100}
+      VITE_APP_ID: service-a
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on:
+      - bff
+
+  service-b-web:
+    build:
+      context: ./apps/service-b-web
+    environment:
+      VITE_BFF_ORIGIN: ${BFF_ORIGIN:-http://localhost:5100}
+      VITE_APP_ID: service-b
+    ports:
+      - "127.0.0.1:5174:5173"
+    depends_on:
+      - bff
